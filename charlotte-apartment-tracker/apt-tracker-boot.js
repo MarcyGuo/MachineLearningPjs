@@ -128,6 +128,7 @@ a.listinglink{color:var(--accent);text-decoration:none;font-size:12px;}\
 .pill.review{background:var(--review-bg);color:var(--review);}\
 .pill.hidden{background:var(--bg);color:var(--muted);}\
 .unit.is-hidden{opacity:.55;}\
+.prop.is-hidden{opacity:.55;}\
 .detail{display:none;margin-top:10px;font-size:12.5px;color:var(--muted);}\
 .unit.open .detail{display:block;}\
 .hidebtn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12.5px;margin-top:2px;}\
@@ -152,22 +153,32 @@ a.listinglink{color:var(--accent);text-decoration:none;font-size:12px;}\
     return true;
   }
 
+  // units to show for a property: a property hidden as a whole shows all its
+  // units when specifically browsing "已隐藏" (so you can see what you blocked),
+  // otherwise falls back to the normal per-unit visibility rules.
+  function propUnits(p) {
+    if (state.hiddenFilter === "only" && p.hidden) return p.units.slice();
+    return p.units.filter(unitVisible);
+  }
+
   function renderApp() {
     var root = document.getElementById("app");
     var q = state.q.trim().toLowerCase();
     var filteredProps = WORK.properties.filter(function (p) {
       if (state.visitedFilter === "yes" && !p.toured) return false;
       if (state.visitedFilter === "no" && p.toured) return false;
-      var us = p.units.filter(unitVisible);
+      if (state.hiddenFilter === "hide" && p.hidden) return false;
+      if (state.hiddenFilter === "only" && !p.hidden && !p.units.some(function (u) { return u.hidden; })) return false;
+      var us = propUnits(p);
       if (us.length === 0) return false;
       if (!q) return true;
       var hay = (p.name + " " + p.address + " " + p.station + " " + p.units.map(function (u) { return u.unit; }).join(" ")).toLowerCase();
       return hay.indexOf(q) !== -1;
     });
 
-    var totalUnits = WORK.properties.reduce(function (a, p) { return a + p.units.filter(function (u) { return !u.hidden; }).length; }, 0);
-    var passCount = WORK.properties.reduce(function (a, p) { return a + p.units.filter(function (u) { return !u.hidden && overallClass(u.overall) === "pass"; }).length; }, 0);
-    var hiddenCount = WORK.properties.reduce(function (a, p) { return a + p.units.filter(function (u) { return u.hidden; }).length; }, 0);
+    var totalUnits = WORK.properties.reduce(function (a, p) { return a + (p.hidden ? 0 : p.units.filter(function (u) { return !u.hidden; }).length); }, 0);
+    var passCount = WORK.properties.reduce(function (a, p) { return a + (p.hidden ? 0 : p.units.filter(function (u) { return !u.hidden && overallClass(u.overall) === "pass"; }).length); }, 0);
+    var hiddenCount = WORK.properties.reduce(function (a, p) { return a + (p.hidden ? p.units.length : p.units.filter(function (u) { return u.hidden; }).length); }, 0);
     var favCount = WORK.properties.reduce(function (a, p) { return a + p.units.filter(function (u) { return u.favorite; }).length; }, 0);
 
     var html = "<div class='topbar'>";
@@ -193,12 +204,12 @@ a.listinglink{color:var(--accent);text-decoration:none;font-size:12px;}\
     html += "<div class='list'>";
     if (filteredProps.length === 0) html += "<div class='empty'>没有匹配的结果</div>";
     filteredProps.forEach(function (p) {
-      var us = p.units.filter(unitVisible);
+      var us = propUnits(p);
       var isOpen = state.expandedProp === p.name;
       var dir = direction(p.station);
-      html += "<div class='prop" + (isOpen ? " open" : "") + "' data-prop='" + esc(p.name) + "'>";
+      html += "<div class='prop" + (isOpen ? " open" : "") + (p.hidden ? " is-hidden" : "") + "' data-prop='" + esc(p.name) + "'>";
       html += "<div class='prop-head' data-toggle-prop='" + esc(p.name) + "'>";
-      html += "<div><div class='prop-name'>" + esc(p.name) + (dir ? " <span class='prop-badge'>· " + esc(dir) + "</span>" : "") + (p.toured ? " <span class='prop-badge'>· 已看房</span>" : "") + "</div>";
+      html += "<div><div class='prop-name'>" + esc(p.name) + (dir ? " <span class='prop-badge'>· " + esc(dir) + "</span>" : "") + (p.toured ? " <span class='prop-badge'>· 已看房</span>" : "") + (p.hidden ? " <span class='prop-badge'>· 已隐藏</span>" : "") + "</div>";
       html += "<div class='prop-sub'>" + esc(p.address) + " · " + esc(p.station) + " 步行" + esc(p.walkMin) + "分</div></div>";
       html += "<div style='display:flex;align-items:center;gap:8px;'><span class='prop-badge'>" + us.length + "套</span><span class='chev'>›</span></div>";
       html += "</div>";
@@ -236,7 +247,8 @@ a.listinglink{color:var(--accent);text-decoration:none;font-size:12px;}\
     if (p.gRating) h += "<span class='chip'>Google " + esc(p.gRating) + "★ (" + esc(p.gReviews) + ")</span>";
     h += "</div>";
 
-    h += "<button class='tourbtn" + (p.toured ? " on" : "") + "' data-tour-toggle='" + esc(p.name) + "' " + (readOnly ? "disabled" : "") + " onclick='event.stopPropagation()'>" + (p.toured ? "✓ 已看房 (点击取消)" : "标记为已看房") + "</button>";
+    h += "<button class='tourbtn" + (p.toured ? " on" : "") + "' data-tour-toggle='" + esc(p.name) + "' " + (readOnly ? "disabled" : "") + " onclick='event.stopPropagation()'>" + (p.toured ? "✓ 已看房 (点击取消)" : "标记为已看房") + "</button> ";
+    h += "<button class='hidebtn" + (p.hidden ? " unhide" : "") + "' data-prophide-toggle='" + esc(p.name) + "' " + (readOnly ? "disabled" : "") + " onclick='event.stopPropagation()'>" + (p.hidden ? "取消隐藏，重新追踪此楼盘" : "不再考虑，隐藏此楼盘") + "</button>";
 
     var bonusCount = 0;
     BONUS_FIELDS.forEach(function (bf) { if (/^yes/i.test(eff(p.bonus[bf[0]]))) bonusCount++; });
@@ -374,6 +386,18 @@ a.listinglink{color:var(--accent);text-decoration:none;font-size:12px;}\
         var u = findUnit(id);
         if (!u) return;
         u.hidden = !u.hidden;
+        markDirty();
+        renderApp();
+      });
+    });
+    root.querySelectorAll("[data-prophide-toggle]").forEach(function (el) {
+      el.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (readOnly) return;
+        var name = el.getAttribute("data-prophide-toggle");
+        var p = findProp(name);
+        if (!p) return;
+        p.hidden = !p.hidden;
         markDirty();
         renderApp();
       });

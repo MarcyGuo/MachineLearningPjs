@@ -120,6 +120,7 @@ def _new_property_shell(name, spec):
         "notes": spec.get("notes", ""),
         "myNote": "",
         "toured": False,
+        "hidden": False,
         "units": [],
     }
 
@@ -146,11 +147,13 @@ def merge(current, researched, today, next_id_start=None):
             # re-checked, but if a property is skipped, carry it forward completely untouched)
             untouched = copy.deepcopy(cur_p)
             untouched.setdefault("toured", False)
+            untouched.setdefault("hidden", False)
             merged_props.append(untouched)
             continue
 
         new_p = copy.deepcopy(cur_p)
         new_p.setdefault("toured", False)
+        new_p.setdefault("hidden", False)
         for simple_key in ("address", "station", "walkMin", "walkRating", "year", "ageOk",
                            "gRating", "gReviews", "url"):
             if simple_key in r:
